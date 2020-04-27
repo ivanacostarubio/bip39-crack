@@ -1,0 +1,12 @@
+[package]
+name = "bip39_crack"
+version = "0.0.1"
+authors = ["Ivan Acosta-Rubio <12wordscapital@protonmail.com>"]
+edition = "2018"
+
+[dependencies]
+bitcoin = "0.21"
+bitcoin-wallet = "1.1.0"
+secp256k1 = "0.17.1"
+hex = "0.4.2"
+
