@@ -1,3 +1,7 @@
+extern crate rayon;
+
+use rayon::prelude::*;
+
 extern crate bitcoin;
 extern crate hex;
 
@@ -5,120 +9,74 @@ use bitcoin::network::constants::*;
 
 use bitcoin::util::bip32::*;
 
-// https://iancoleman.io/bip39/ 
+// https://iancoleman.io/bip39/
 
 use bitcoin_wallet::mnemonic::*;
 
 use bitcoin::util::address::Address;
 
+use std::process;
+
 fn main() {
-   
     let addr_to_crack = "1DabcMdbgBwHTn3K7SuvHj2DmtNLazFpVk";
 
-    let known_words= "announce damage viable ticket engage curious yellow ten clock finish burden orient faculty rigid smile host offer affair suffer slogan mercy another";
+    let known_words=
+        "announce damage viable ticket engage curious yellow ten clock finish burden orient faculty rigid smile host offer affair suffer slogan mercy another";
 
     let posible_seeds = generate_all_posible_combinations(known_words);
 
-    for s in posible_seeds.iter(){
-
-        let string = s.join(" ");
-
-        //println!("{:?}", string);
-        let addr = wallet_stuff(&string);
-
-
-        match addr{
-            Ok(x) => {
-                if x.to_string() == addr_to_crack{
-                    println!("------------------------------");
-                    println!("CRACKED");
-                    println!("------------------------------");
-                    println!("SEED");
-                    println!("------------------------------");
-                    println!("{:}", string);
-                    return;
-                }
-            },
-
-            Err(_) => {
-            }
-        }
-
-    }
-
+    posible_seeds
+        .into_par_iter()
+        .for_each(|s| check_key(s, addr_to_crack));
 }
 
-fn wallet_stuff(words_seed: &str) -> Result<Address,bitcoin_wallet::error::Error>{
+fn check_key(s: std::vec::Vec<&str>, solution: &str) {
+    let string = s.join(" ");
 
+    //println!("{:?}", string);
+    //
+    //o
+    let addr = pub_key_from_seed(&string);
+
+    match addr {
+        Ok(seed) => {
+            if seed.to_string() == solution {
+                println!("------------------------------");
+                println!("CRACKED");
+                println!("------------------------------");
+                println!("SEED");
+                println!("------------------------------");
+                println!("{:}", string);
+                process::exit(0x0100);
+            }
+        }
+        Err(_) => {}
+    }
+}
+fn pub_key_from_seed(words_seed: &str) -> Result<Address, bitcoin_wallet::error::Error> {
     let mne = Mnemonic::from_str(words_seed);
 
     match mne {
         Ok(mnemonic) => {
             let mnemonic_seed = mnemonic.to_seed(None);
-
             let seed = mnemonic_seed.0;
-
-            //let seed_hex = hex::encode(words);
-            //let seed = Vec::from_hex(&seed_hex).unwrap();
-
-
             let secp = bitcoin::secp256k1::Secp256k1::new();
-
             let sk = ExtendedPrivKey::new_master(Network::Bitcoin, &seed).unwrap();
             let pk = ExtendedPubKey::from_private(&secp, &sk);
-
-            //    println!("BIP32 Root Key {:?}", sk.to_string());
-
-            // let path: DerivationPath= "m/0".parse().unwrap();
-
-            //let d_pk = sk.derive_priv(&secp, &path).unwrap();
-
-            //    println!("BIP32 Extended Private Key: {:?}", d_pk.to_string());
-
-            // let d_pk1 = pk.derive_pub(&secp, &path).unwrap();
-
-            //    println!("BIP32 Extended Public Key: {:?}", d_pk1.to_string());
-
-
-            ////
-
-
-            let path: DerivationPath= "m/0/0".parse().unwrap();
-
-            // let d_priv = sk.derive_priv(&secp, &path).unwrap();
-
-            //   println!("Derived Private Key: {:?}", d_pk.to_string());
-
-            let d_pub  = pk.derive_pub(&secp, &path).unwrap();
-
-            //    println!("Derived Extended Public Key: {:?}", d_pk1.to_string());
-
+            let path: DerivationPath = "m/0/0".parse().unwrap();
+            let d_pub = pk.derive_pub(&secp, &path).unwrap();
             let address = Address::p2pkh(&d_pub.public_key, Network::Bitcoin);
 
+            println!("{:?}", address.clone());
 
+            return Ok(address);
+        }
 
-            println!("{:?}", address.clone()); 
-
-            return Ok(address)
-
-        },
-
-        Err(e) => { return Err(e) }
-
+        Err(e) => return Err(e),
     }
-
 }
 
-
 fn generate_all_posible_combinations(words: &str) -> std::vec::Vec<std::vec::Vec<&str>> {
-    /* 
-     * let sub_set_of_posibles = Substract the known_words from posible words
-       create a combination of posible 2 pais
-       generage posible seed with each combination
-       check if address is dirivable from it
-
-       */
-
     let known_words = words.split(" ").collect::<Vec<&str>>();
 
     println!("Total Posible Words: {:?}", WORDS.len());
@@ -127,24 +85,21 @@ fn generate_all_posible_combinations(words: &str) -> std::vec::Vec<std::vec::Vec
 
     println!("Pregenerating posible seeds... ");
 
-
     let mut sub_set_posible = Vec::new();
 
-    for word in WORDS.iter(){
-        if known_words.contains(&word){
+    for word in WORDS.iter() {
+        if known_words.contains(&word) {
             // do nothing
-        }else{
+        } else {
             sub_set_posible.push(word.clone());
         }
     }
 
     let result = create_all_posible_two_combination(sub_set_posible);
 
-
     let mut posible_24_words_seed: Vec<std::vec::Vec<&str>> = Vec::new();
 
-    for r in result{
-
+    for r in result {
         let mut a1 = known_words.to_vec().clone();
 
         let mut rr = r.clone();
@@ -153,25 +108,19 @@ fn generate_all_posible_combinations(words: &str) -> std::vec::Vec<std::vec::Vec
         a1.push(rr.pop().unwrap());
 
         posible_24_words_seed.push(a1);
-
     }
 
     return posible_24_words_seed;
- 
-
 }
 
-
 fn create_all_posible_two_combination(xxx: Vec<&str>) -> std::vec::Vec<std::vec::Vec<&str>> {
-
     let mut w = xxx.clone();
 
     let mut init = Vec::new();
 
     let f = w.pop().unwrap();
 
-    for word in w.clone(){
-        
+    for word in w.clone() {
         let mut a = Vec::new();
 
         a.push(f.clone());
@@ -181,11 +130,9 @@ fn create_all_posible_two_combination(xxx: Vec<&str>) -> std::vec::Vec<std::vec:
     }
 
     while w.len() != 0 {
-
         let f = w.pop().unwrap();
 
-        for word in w.clone(){
-
+        for word in w.clone() {
             let mut a = Vec::new();
 
             a.push(f.clone());
@@ -193,14 +140,10 @@ fn create_all_posible_two_combination(xxx: Vec<&str>) -> std::vec::Vec<std::vec:
 
             init.push(a);
         }
-
     }
 
     return init;
 }
-
-
-
 
 const WORDS: [&str; 2048] = [
     "abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract", "absurd",
